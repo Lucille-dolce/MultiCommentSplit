@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>댓글 분할기 (400자 제한)</title>
+  <!-- Pretendard 폰트 (상업적 무료 웹폰트) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard/dist/web/static/pretendard.css">
+  <style>
+    body {
+      font-family: 'Pretendard', sans-serif;
+      background: #f7f7f7;
+      margin: 0;
+      padding: 20px;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    textarea {
+      width: 100%;
+      height: 150px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 1em;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .buttons {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    button {
+      flex: 1;
+      padding: 10px;
+      font-size: 1em;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.3s;
+      color: #333;
+    }
+    button:hover {
+      filter: brightness(95%);
+    }
+    /* 파스텔 컬러 */
+    .split-btn {
+      background-color: #FFE082; /* 밝은 파스텔 오렌지 */
+    }
+    .download-csv {
+      background-color: #FFCCBC; /* 밝은 파스텔 살구 */
+    }
+    .download-txt {
+      background-color: #F8BBD0; /* 밝은 파스텔 핑크 */
+    }
+    .download-zip {
+      background-color: #C8E6C9; /* 밝은 파스텔 그린 */
+    }
+    .copy-clipboard {
+      background-color: #E1BEE7; /* 밝은 파스텔 퍼플 */
+    }
+    
+    .result {
+      margin-top: 20px;
+    }
+    .result-count {
+      font-size: 1.2em;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    /* 분할된 텍스트의 각 블록 */
+    .segment {
+      position: relative;          /* 복사 버튼을 우측 상단에 배치하기 위함 */
+      margin-bottom: 15px;        
+      padding: 15px 45px 15px 15px; /* 오른쪽 공간을 좀 더 확보 */
+      border: 1px solid #eee;
+      border-radius: 10px;
+      background: #f9f9f9;
+      word-break: break-all;
+    }
+    /* 분할 번호 */
+    .segment-index {
+      font-weight: bold;
+      color: #666;
+      margin-bottom: 5px;
+    }
+    /* 실제 텍스트 */
+    .segment-text {
+      margin-top: 5px;
+      line-height: 1.5;
+    }
+    /* 개별 복사 버튼 */
+    .segment-copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      border: none;
+      background: none;
+      color: #999;
+      font-size: 1.2em;
+      cursor: pointer;
+      padding: 0;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.3s, transform 0.2s;
+    }
+    .segment-copy-btn:hover {
+      color: #333;
+      transform: scale(1.1);
+    }
+    
+    @media (max-width: 600px) {
+      .buttons {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>댓글 분할기 📝</h1>
+    <textarea id="inputText" placeholder="여기에 긴 텍스트를 입력하세요..."></textarea>
+    <div class="buttons">
+      <button class="split-btn" id="splitButton">분할 시작 🚀</button>
+      <button class="download-csv" id="downloadCsv">CSV 다운로드 📥</button>
+      <button class="download-txt" id="downloadTxt">TXT 다운로드 📄</button>
+      <button class="download-zip" id="downloadZip">ZIP 다운로드 📦</button>
+      <button class="copy-clipboard" id="copyClipboard">클립보드 복사 📋</button>
+    </div>
+    <div class="result" id="resultArea"></div>
+  </div>
+  
+  <!-- JSZip 라이브러리 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  
+  <script>
+    const MAX_CHARS = 400;
+    
+    // 입력된 텍스트를 어절 단위로 나누어 400자 제한에 맞게 분할
+    function splitText(text) {
+      let segments = [];
+      let words = text.split(/\s+/);
+      let currentSegment = "";
+      
+      for (let word of words) {
+        // 다음 단어를 추가했을 때 400자를 초과하면 분할
+        if ((currentSegment + (currentSegment ? " " : "") + word).length > MAX_CHARS) {
+          // 현재 세그먼트가 비어있다면(단어 자체가 너무 긴 경우) 강제로 400자씩 분할
+          if (!currentSegment) {
+            let start = 0;
+            while(start < word.length) {
+              segments.push(word.slice(start, start + MAX_CHARS));
+              start += MAX_CHARS;
+            }
+          } else {
+            segments.push(currentSegment);
+            currentSegment = word;
+          }
+        } else {
+          currentSegment += (currentSegment ? " " : "") + word;
+        }
+      }
+      if (currentSegment) {
+        segments.push(currentSegment);
+      }
+      return segments;
+    }
+    
+    // 분할된 세그먼트를 화면에 표시
+    function displaySegments(segments) {
+      const resultArea = document.getElementById('resultArea');
+      resultArea.innerHTML = "";
+      
+      // 분할 개수 표시
+      const countElem = document.createElement('div');
+      countElem.className = "result-count";
+      countElem.textContent = `분할된 댓글 개수: ${segments.length}`;
+      resultArea.appendChild(countElem);
+      
+      // 각 세그먼트를 UI로 생성
+      segments.forEach((segment, index) => {
+        const segElem = document.createElement('div');
+        segElem.className = "segment";
+        
+        const segIndex = document.createElement('div');
+        segIndex.className = "segment-index";
+        segIndex.textContent = `#${index + 1}`;
+        
+        const segText = document.createElement('div');
+        segText.className = "segment-text";
+        segText.textContent = segment;
+        
+        // 개별 복사 버튼
+        const copyBtn = document.createElement('button');
+        copyBtn.className = "segment-copy-btn";
+        copyBtn.innerText = "📋";
+        copyBtn.title = "이 텍스트만 복사";
+        copyBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(segment)
+            .then(() => alert("클립보드에 복사되었습니다!"))
+            .catch(err => alert("복사 실패: " + err));
+        });
+        
+        segElem.appendChild(segIndex);
+        segElem.appendChild(segText);
+        segElem.appendChild(copyBtn);
+        
+        resultArea.appendChild(segElem);
+      });
+    }
+    
+    // CSV 다운로드
+    function downloadCSV(segments) {
+      let csvContent = segments.map((seg, i) => `"Segment ${i+1}","${seg.replace(/"/g, '""')}"`).join("\n");
+      let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      let url = URL.createObjectURL(blob);
+      let a = document.createElement('a');
+      a.href = url;
+      a.download = `segments_${new Date().toISOString()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    
+    // TXT 다운로드
+    function downloadTextFile(segments) {
+      let textContent = segments.join("\n\n");
+      let blob = new Blob([textContent], { type: 'text/plain;charset=utf-8;' });
+      let url = URL.createObjectURL(blob);
+      let a = document.createElement('a');
+      a.href = url;
+      a.download = `segments_${new Date().toISOString()}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    
+    // ZIP 다운로드 (JSZip 활용)
+    function downloadZip(segments) {
+      const zip = new JSZip();
+      const folderName = `segments_${new Date().toISOString()}`;
+      const folder = zip.folder(folderName);
+      
+      segments.forEach((seg, index) => {
+        folder.file(`segment_${index+1}.txt`, seg);
+      });
+      
+      zip.generateAsync({type:"blob"}).then(function(content) {
+        let a = document.createElement('a');
+        a.href = URL.createObjectURL(content);
+        a.download = `${folderName}.zip`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+    }
+    
+    // 전체 텍스트 클립보드 복사
+    function copyToClipboard(segments) {
+      const textToCopy = segments.join("\n\n");
+      navigator.clipboard.writeText(textToCopy)
+        .then(() => alert("클립보드에 복사되었습니다!"))
+        .catch(err => alert("복사 실패: " + err));
+    }
+    
+    // 버튼 이벤트
+    document.getElementById('splitButton').addEventListener('click', () => {
+      const inputText = document.getElementById('inputText').value.trim();
+      if (!inputText) {
+        alert("텍스트를 입력해주세요.");
+        return;
+      }
+      const segments = splitText(inputText);
+      displaySegments(segments);
+    });
+    
+    document.getElementById('downloadCsv').addEventListener('click', () => {
+      const inputText = document.getElementById('inputText').value.trim();
+      if (!inputText) {
+        alert("텍스트를 입력해주세요.");
+        return;
+      }
+      const segments = splitText(inputText);
+      downloadCSV(segments);
+    });
+    
+    document.getElementById('downloadTxt').addEventListener('click', () => {
+      const inputText = document.getElementById('inputText').value.trim();
+      if (!inputText) {
+        alert("텍스트를 입력해주세요.");
+        return;
+      }
+      const segments = splitText(inputText);
+      downloadTextFile(segments);
+    });
+    
+    document.getElementById('downloadZip').addEventListener('click', () => {
+      const inputText = document.getElementById('inputText').value.trim();
+      if (!inputText) {
+        alert("텍스트를 입력해주세요.");
+        return;
+      }
+      const segments = splitText(inputText);
+      downloadZip(segments);
+    });
+    
+    document.getElementById('copyClipboard').addEventListener('click', () => {
+      const inputText = document.getElementById('inputText').value.trim();
+      if (!inputText) {
+        alert("텍스트를 입력해주세요.");
+        return;
+      }
+      const segments = splitText(inputText);
+      copyToClipboard(segments);
+    });
+  </script>
+</body>
+</html>
